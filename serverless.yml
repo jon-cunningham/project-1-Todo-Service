@@ -1,0 +1,84 @@
+service: todo-service
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    pythonBin: python3
+    dockerizePip: true
+  environment:
+    STAGE: ${self:provider.stage}
+
+package:
+  patterns:
+    - "main.py"
+    - "!requirements.txt"
+    - "!package.json"
+    - "!package-lock.json"
+    - "!.serverless/**"
+    - "!.virtualenv/**"
+    - "!node_modules/**"
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: us-west-1
+  stage: ${opt:stage, "dev"}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: 's3:ListBucket'
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - s3:*
+          Resource:
+            - 'arn:aws:s3:::my-bucket-name/*'
+        - Effect: Allow
+          Action:
+            - dynamodb:DescribeTable
+            - dynamodb:Query
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:BatchWriteItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchExecuteStatement
+            - dynamodb:Scan
+          Resource:
+            - !GetAtt Todo.Arn
+
+functions:
+  # point main.handler at fastAPI in main.py
+  application:
+    handler: main.handler
+    events:
+      - http:
+          method: any
+          path: /{proxy+}
+      - http:
+          method: get
+          path: /
+
+resources:
+  Resources:
+    Todo:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Todo
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: id
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
